@@ -27,7 +27,7 @@ export default function OTPInput({ onVerify, isVerified }: OTPInputProps) {
 
   const handleKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
-    index: number
+    index: number,
   ) => {
     if (e.key === "Backspace") {
       if (otp[index] === "" && index > 0) {
@@ -40,7 +40,6 @@ export default function OTPInput({ onVerify, isVerified }: OTPInputProps) {
     }
   };
 
-  // Auto submit when filled
   useEffect(() => {
     const fullOtp = otp.join("");
     if (fullOtp.length === 4) {
@@ -49,15 +48,13 @@ export default function OTPInput({ onVerify, isVerified }: OTPInputProps) {
   }, [otp, onVerify]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="flex justify-center gap-2"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center gap-2">
       {otp.map((digit, i) => (
         <input
           key={i}
-          ref={(el) => (inputsRef.current[i] = el)}
+          ref={(el) => {
+            inputsRef.current[i] = el;
+          }}
           type="text"
           inputMode="numeric"
           maxLength={1}
@@ -66,7 +63,7 @@ export default function OTPInput({ onVerify, isVerified }: OTPInputProps) {
           onKeyDown={(e) => handleKeyDown(e, i)}
           className={`w-12 h-12 text-center text-lg rounded-xl
           bg-white/40 backdrop-blur-md
-          border 
+          border
           ${
             isVerified
               ? "border-champagne"

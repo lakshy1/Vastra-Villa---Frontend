@@ -1,4 +1,8 @@
-export default function PasswordStrength({ password }: any) {
+type PasswordStrengthProps = {
+  password: string;
+};
+
+export default function PasswordStrength({ password }: PasswordStrengthProps) {
   const getStrength = () => {
     if (password.length > 10) return "Strong";
     if (password.length > 6) return "Medium";
@@ -18,15 +22,13 @@ export default function PasswordStrength({ password }: any) {
             strength === "Weak"
               ? "bg-deepRoseGold w-1/3"
               : strength === "Medium"
-              ? "bg-champagne w-2/3"
-              : "bg-obsidian w-full"
+                ? "bg-champagne w-2/3"
+                : "bg-obsidian w-full"
           }`}
         />
       </div>
 
-      <p className="text-sm mt-2 text-obsidian/70">
-        Password Strength: {strength}
-      </p>
+      <p className="text-sm mt-2 text-obsidian/70">Password Strength: {strength}</p>
     </div>
   );
 }
