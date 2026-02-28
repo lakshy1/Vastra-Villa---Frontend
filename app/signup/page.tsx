@@ -5,129 +5,112 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 import PasswordStrength from "@/components/PasswordStrength";
+import { sendOtp, verifyOtp, registerUser } from "@/services/authService";
 
 export default function SignupPage() {
   const router = useRouter();
 
-  /* ================= FORM STATES ================= */
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [otpSent, setOtpSent] = useState(false);
-  const [emailOtp, setEmailOtp] = useState(["", "", "", ""]);
+  /* ─── states ─────────────────────────────────── */
+  const [firstName, setFirstName]       = useState("");
+  const [lastName, setLastName]         = useState("");
+  const [email, setEmail]               = useState("");
+  const [phone, setPhone]               = useState("");
+  const [password, setPassword]         = useState("");
+  const [otpSent, setOtpSent]           = useState(false);
+  const [emailOtp, setEmailOtp]         = useState(["", "", "", "", "", ""]);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-
-  const [cooldown, setCooldown] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown]         = useState(0);
+  const [loading, setLoading]           = useState(false);
+  const [otpLoading, setOtpLoading]     = useState(false);
 
   const isValidPhone = phone.length === 10;
-  const isValidEmail = email.includes("@");
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  /* ================= OTP TIMER ================= */
+  /* ─── countdown timer ────────────────────────── */
   useEffect(() => {
     if (cooldown <= 0) return;
-    const timer = setInterval(() => {
-      setCooldown((prev) => prev - 1);
-    }, 1000);
+    const timer = setInterval(() => setCooldown((prev) => prev - 1), 1000);
     return () => clearInterval(timer);
   }, [cooldown]);
 
-  /* ================= SEND EMAIL OTP ================= */
+  /* ─── SEND OTP ───────────────────────────────── */
   const handleSendOTP = async () => {
     if (!isValidEmail) {
-      toast.error("Enter valid email address", {
-        style: { background: "#1A1A1A", color: "#F9F7F1" },
-      });
+      toast.error("Enter a valid email address");
       return;
     }
 
-    /*
-      🔥 BACKEND:
-      await fetch("/api/send-email-otp", {
-        method: "POST",
-        body: JSON.stringify({ email }),
-      });
-    */
-
-    setOtpSent(true);
-    setCooldown(120);
-    setIsOtpVerified(false);
-
-    toast.success("OTP sent to email", {
-      style: { background: "#1A1A1A", color: "#F9F7F1" },
-    });
+    setOtpLoading(true);
+    try {
+      await sendOtp(email);
+      setOtpSent(true);
+      setCooldown(120);
+      setIsOtpVerified(false);
+      setEmailOtp(["", "", "", "", "", ""]);
+      toast.success("OTP sent to your email");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to send OTP");
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
-  /* ================= VERIFY OTP ================= */
-  const verifyOTP = useCallback(
-    (enteredOtp: string) => {
+  /* ─── VERIFY OTP ─────────────────────────────── */
+  const handleVerifyOtp = useCallback(
+    async (enteredOtp) => {
       if (isOtpVerified || isVerifyingOtp) return;
 
       setIsVerifyingOtp(true);
-
-      /*
-        🔥 BACKEND VERIFY:
-        await fetch("/api/verify-email-otp", {...})
-      */
-
-      if (enteredOtp === "1234") {
+      try {
+        await verifyOtp(email, enteredOtp);
         setIsOtpVerified(true);
-        toast.success("Email Verified Successfully", {
-          style: { background: "#1A1A1A", color: "#F9F7F1" },
-        });
-      } else {
-        toast.error("Invalid OTP", {
-          style: { background: "#1A1A1A", color: "#F9F7F1" },
-        });
+        toast.success("Email verified successfully ✅");
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Invalid OTP");
+        setEmailOtp(["", "", "", "", "", ""]); // clear otp boxes on wrong
+      } finally {
+        setIsVerifyingOtp(false);
       }
-
-      setIsVerifyingOtp(false);
     },
-    [isOtpVerified, isVerifyingOtp]
+    [email, isOtpVerified, isVerifyingOtp]
   );
 
+  /* ─── REGISTER ───────────────────────────────── */
   const isFormValid =
     firstName.trim() &&
     lastName.trim() &&
     isValidEmail &&
     isOtpVerified &&
     isValidPhone &&
-    password.length > 0;
+    password.length >= 6;
 
   const handleSubmit = async () => {
     if (!isFormValid) return;
 
     setLoading(true);
-
-    /*
-      🔥 BACKEND SIGNUP:
-      await fetch("/api/signup", {
-        method: "POST",
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          email,
-          phone,
-          password,
-        }),
-      });
-    */
-
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Account Created Successfully ✨", {
-        style: { background: "#1A1A1A", color: "#F9F7F1" },
+    try {
+      const { data } = await registerUser({
+        name: `${firstName} ${lastName}`,
+        phone,
+        email,
+        password,
       });
 
+      // save token to localStorage
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      toast.success("Account created successfully ✨");
       router.replace("/dashboard");
-    }, 1000);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const formatTime = (seconds: number) => {
+  const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
@@ -149,61 +132,81 @@ export default function SignupPage() {
 
         <div className="space-y-6">
 
-          {/* FIRST + LAST */}
+          {/* FIRST + LAST NAME */}
           <div className="flex gap-4">
             <div className="w-1/2">
-              <Input label="First Name" value={firstName} onChange={(e:any)=>setFirstName(e.target.value)} />
+              <Input label="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             </div>
             <div className="w-1/2">
-              <Input label="Last Name" value={lastName} onChange={(e:any)=>setLastName(e.target.value)} />
+              <Input label="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
             </div>
           </div>
 
-          {/* EMAIL + OTP BUTTON */}
+          {/* EMAIL + SEND OTP BUTTON */}
           <div className="flex gap-4 items-center">
             <div className="flex-1">
-              <Input label="Email Address" value={email} onChange={(e:any)=>setEmail(e.target.value)} />
+              <Input
+                label="Email Address"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setOtpSent(false);         // reset if email changes
+                  setIsOtpVerified(false);
+                }}
+              />
             </div>
-
             <button
-              disabled={!isValidEmail || cooldown > 0}
+              disabled={!isValidEmail || cooldown > 0 || otpLoading}
               onClick={handleSendOTP}
               className="px-4 py-3 rounded-xl min-w-[120px]
               bg-obsidian text-alabaster hover:bg-champagne hover:text-obsidian
-              disabled:bg-softSilk disabled:text-obsidian/40"
+              disabled:bg-softSilk disabled:text-obsidian/40 transition-all"
             >
-              {cooldown > 0
+              {otpLoading
+                ? "Sending..."
+                : cooldown > 0
                 ? `Resend ${formatTime(cooldown)}`
                 : "Send OTP"}
             </button>
           </div>
 
-          {/* OTP BOXES */}
+          {/* OTP BOXES — shows after OTP sent */}
           {otpSent && (
             <EmailOTP
               emailOtp={emailOtp}
               setEmailOtp={setEmailOtp}
-              onVerify={verifyOTP}
+              onVerify={handleVerifyOtp}
               isVerified={isOtpVerified}
+              isVerifying={isVerifyingOtp}
             />
           )}
 
           {/* PHONE */}
-          <Input label="Phone Number" value={phone} onChange={(e:any)=>setPhone(e.target.value.replace(/\D/g,""))} />
+          <Input
+            label="Phone Number"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+          />
 
           {/* PASSWORD */}
-          <Input label="Password" type="password" value={password} onChange={(e:any)=>setPassword(e.target.value)} />
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <PasswordStrength password={password} />
 
-          {/* CREATE BUTTON */}
+          {/* REGISTER BUTTON */}
           <motion.button
             disabled={!isFormValid || loading}
             onClick={handleSubmit}
+            whileTap={{ scale: 0.98 }}
             className="w-full py-3 rounded-xl font-medium
             bg-obsidian text-alabaster hover:bg-champagne hover:text-obsidian
-            disabled:bg-softSilk disabled:text-obsidian/40"
+            disabled:bg-softSilk disabled:text-obsidian/40 transition-all"
           >
-            {loading ? "Creating..." : "Create Account"}
+            {loading ? "Creating Account..." : "Create Account"}
           </motion.button>
 
         </div>
@@ -212,10 +215,10 @@ export default function SignupPage() {
   );
 }
 
-/* ================= FLOATING INPUT ================= */
-function Input({ label, type="text", value, onChange }: any){
+/* ─── FLOATING LABEL INPUT ───────────────────────────────── */
+function Input({ label, type = "text", value, onChange }) {
   const inputId = label.replace(/\s+/g, "-").toLowerCase();
-  return(
+  return (
     <div className="relative">
       <input
         id={inputId}
@@ -238,51 +241,72 @@ function Input({ label, type="text", value, onChange }: any){
         {label}
       </label>
     </div>
-  )
+  );
 }
 
-/* ================= EMAIL OTP ================= */
-function EmailOTP({ emailOtp, setEmailOtp, onVerify, isVerified }: any){
-  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+/* ─── EMAIL OTP BOXES ────────────────────────────────────── */
+function EmailOTP({ emailOtp, setEmailOtp, onVerify, isVerified, isVerifying }) {
+  const inputsRef = useRef([]);
   const hasSubmittedRef = useRef(false);
 
-  const handleChange=(value:string,index:number)=>{
-    const digit=value.replace(/\D/g,"");
-    if(!digit) return;
+  // reset submitted ref when otp clears
+  useEffect(() => {
+    if (emailOtp.every((d) => d === "")) {
+      hasSubmittedRef.current = false;
+    }
+  }, [emailOtp]);
 
-    const newOtp=[...emailOtp];
-    newOtp[index]=digit;
+  const handleChange = (value, index) => {
+    const digit = value.replace(/\D/g, "");
+    if (!digit) return;
+    const newOtp = [...emailOtp];
+    newOtp[index] = digit;
     setEmailOtp(newOtp);
-
-    if(index<3) inputsRef.current[index+1]?.focus();
+    if (index < emailOtp.length - 1) inputsRef.current[index + 1]?.focus();
   };
 
-  useEffect(()=>{
-    const fullOtp=emailOtp.join("");
-    if(fullOtp.length===4 && !hasSubmittedRef.current){
-      hasSubmittedRef.current=true;
+  const handleKeyDown = (e, index) => {
+    if (e.key === "Backspace") {
+      const newOtp = [...emailOtp];
+      newOtp[index] = "";
+      setEmailOtp(newOtp);
+      if (index > 0) inputsRef.current[index - 1]?.focus();
+    }
+  };
+
+  useEffect(() => {
+    const fullOtp = emailOtp.join("");
+    if (fullOtp.length === emailOtp.length && !hasSubmittedRef.current) {
+      hasSubmittedRef.current = true;
       onVerify(fullOtp);
     }
-  },[emailOtp,onVerify]);
+  }, [emailOtp, onVerify]);
 
-  return(
-    <div className="flex justify-center gap-2">
-      {emailOtp.map((digit:any,i:number)=>(
-        <input
-          key={i}
-          ref={(el)=>inputsRef.current[i]=el}
-          maxLength={1}
-          value={digit}
-          onChange={(e)=>handleChange(e.target.value,i)}
-          className={`w-12 h-12 text-center rounded-xl
-          bg-white/40 border
-          ${
-            isVerified
-              ? "border-champagne"
+  return (
+    <div>
+      <p className="text-sm text-obsidian/60 text-center mb-3">
+        {isVerified ? "✅ Email Verified" : isVerifying ? "Verifying..." : "Enter OTP sent to your email"}
+      </p>
+      <div className="flex justify-center gap-2">
+        {emailOtp.map((digit, i) => (
+          <input
+            key={i}
+            ref={(el) => (inputsRef.current[i] = el)}
+            type="text"
+            inputMode="numeric"
+            maxLength={1}
+            value={digit}
+            disabled={isVerified}
+            onChange={(e) => handleChange(e.target.value, i)}
+            onKeyDown={(e) => handleKeyDown(e, i)}
+            className={`w-12 h-12 text-center rounded-xl bg-white/40 border
+            ${isVerified
+              ? "border-champagne bg-champagne/10"
               : "border-softSilk focus:ring-2 focus:ring-champagne"
-          }`}
-        />
-      ))}
+            } outline-none transition-all text-obsidian`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
